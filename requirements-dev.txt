@@ -1,0 +1,7 @@
+# Lightweight requirements for CI testing only
+# (not for production — production uses the full requirements.txt + Docker)
+pandas==2.2.2
+requests==2.32.3
+pytest==8.2.2
+flake8==7.1.0
+sqlalchemy==2.0.31

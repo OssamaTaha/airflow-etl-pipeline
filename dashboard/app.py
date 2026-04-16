@@ -1,231 +1,232 @@
 """
-Airflow ETL Pipeline Monitoring Dashboard
-Run with: streamlit run dashboard/app.py --server.port 8501
+Airflow ETL Pipeline — Monitoring Dashboard (Demo Mode)
+Deployed on Streamlit Community Cloud
+
+Source: https://github.com/OssamaTaha/airflow-etl-pipeline
+Full pipeline runs via Docker Compose locally — this dashboard shows
+the monitoring interface with simulated data for portfolio demonstration.
 """
-import os
 import streamlit as st
 import pandas as pd
-import psycopg2
+import random
 from datetime import datetime, timedelta
 
-# Page config
 st.set_page_config(
     page_title="ETL Pipeline Monitor",
     page_icon="📊",
     layout="wide",
 )
 
-st.title("📊 Airflow ETL Pipeline — Monitoring Dashboard")
-st.caption(f"Last updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+# ── Header ──
+st.title("Airflow ETL Pipeline Monitor")
+st.caption("Multi-Source Data Orchestration with Apache Airflow")
+st.caption("[GitHub Repository](https://github.com/OssamaTaha/airflow-etl-pipeline)")
 
-# Database connection
-DB_URL = os.environ.get(
-    "AIRFLOW_CONN_POSTGRES_TARGET",
-    "postgresql://target_user:target_pass@localhost:5432/etl_target",
+st.info(
+    "**Demo Mode** — This dashboard shows the monitoring interface for the "
+    "Airflow ETL Pipeline project. The full stack runs locally via "
+    "`docker compose up`. Data shown is simulated for portfolio demonstration.",
+    icon="ℹ️",
 )
 
+st.divider()
 
-def run_query(query: str, params=None) -> pd.DataFrame:
-    """Execute a query and return a DataFrame."""
-    try:
-        conn = psycopg2.connect(DB_URL)
-        df = pd.read_sql(query, conn, params=params)
-        conn.close()
-        return df
-    except Exception as e:
-        st.error(f"Database error: {e}")
-        return pd.DataFrame()
+# ── Generate realistic mock data ──
+@st.cache_data
+def generate_mock_data():
+    now = datetime.utcnow()
+    dag_ids = [
+        "extract_exchange_rates",
+        "extract_worldbank_indicators",
+        "transform_and_load_warehouse",
+        "data_pipeline_monitoring",
+    ]
+    schedules = {
+        "extract_exchange_rates": "Daily 06:00 UTC",
+        "extract_worldbank_indicators": "Weekly Sun 02:00 UTC",
+        "transform_and_load_warehouse": "Daily 07:00 UTC",
+        "data_pipeline_monitoring": "Every 6 hours",
+    }
+
+    # Pipeline runs (last 30 days)
+    runs = []
+    for dag_id in dag_ids:
+        n_runs = 30 if "Daily" in schedules[dag_id] else (4 if "Weekly" in schedules[dag_id] else 120)
+        for i in range(n_runs):
+            t = now - timedelta(hours=i * (24 if "Daily" in schedules[dag_id] else (168 if "Weekly" in schedules[dag_id] else 6)))
+            state = random.choices(["success", "success", "success", "success", "failed", "success"], weights=[70, 10, 5, 5, 5, 5])[0]
+            duration = round(random.uniform(12, 180), 2) if state == "success" else round(random.uniform(5, 60), 2)
+            runs.append({
+                "dag_id": dag_id,
+                "run_id": f"manual__{t.strftime('%Y-%m-%dT%H:%M')}",
+                "state": state,
+                "start_time": t,
+                "end_time": t + timedelta(seconds=duration),
+                "duration_seconds": duration,
+            })
+    runs_df = pd.DataFrame(runs)
+
+    # Table stats
+    tables = [
+        ("staging", "exchange_rates", 4820, 1.2),
+        ("staging", "worldbank_indicators", 2340, 0.8),
+        ("staging", "api_users", 120, 0.1),
+        ("production", "exchange_rates", 4510, 1.1),
+        ("production", "country_indicators", 580, 0.4),
+        ("production", "derived_metrics", 290, 0.2),
+        ("monitoring", "pipeline_runs", 1860, 0.6),
+        ("monitoring", "table_stats", 480, 0.2),
+        ("monitoring", "quality_checks", 720, 0.3),
+    ]
+    table_df = pd.DataFrame(tables, columns=["schema", "table", "row_count", "size_mb"])
+    table_df["full_name"] = table_df["schema"] + "." + table_df["table"]
+
+    # Quality checks
+    checks = []
+    for i in range(20):
+        t = now - timedelta(hours=i * 6)
+        status = random.choices(["PASS", "PASS", "PASS", "WARN"], weights=[80, 10, 5, 5])[0]
+        checks.append({
+            "check_name": f"pipeline_health_check_{i}",
+            "table_name": random.choice(table_df["full_name"].tolist()),
+            "status": status,
+            "message": "All DAGs healthy" if status == "PASS" else "High table growth rate",
+            "checked_at": t,
+        })
+    checks_df = pd.DataFrame(checks)
+
+    # Exchange rates (latest)
+    currencies = ["EUR", "GBP", "EGP", "JPY", "CAD", "AUD", "CHF", "CNY", "INR", "BRL", "SAR", "AED"]
+    rates = {c: round(random.uniform(0.5, 160), 4) for c in currencies}
+    rates_df = pd.DataFrame(
+        [(b, t, r) for b in ["USD", "EUR"] for t, r in rates.items()],
+        columns=["base_currency", "target_currency", "rate"],
+    )
+
+    return runs_df, table_df, checks_df, rates_df, schedules
 
 
-# --- Sidebar ---
-st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to", ["Overview", "DAG Runs", "Tables", "Data Quality", "Exchange Rates"])
+runs_df, table_df, checks_df, rates_df, schedules = generate_mock_data()
 
-# --- Overview Page ---
+# ── Sidebar ──
+page = st.sidebar.radio("Navigation", ["Overview", "DAG Runs", "Tables", "Data Quality", "Exchange Rates"])
+
+# ── Overview ──
 if page == "Overview":
     st.header("Pipeline Overview")
 
     col1, col2, col3, col4 = st.columns(4)
-
-    # Total DAG runs
-    dag_stats = run_query(
-        "SELECT state, COUNT(*) as count FROM monitoring.pipeline_runs GROUP BY state"
-    )
-    if not dag_stats.empty:
-        total_runs = dag_stats["count"].sum()
-        success_count = dag_stats[dag_stats["state"] == "success"]["count"].sum() if "success" in dag_stats["state"].values else 0
-        col1.metric("Total DAG Runs", total_runs)
-        col2.metric("Successful", success_count)
-        col3.metric("Success Rate", f"{(success_count/total_runs*100):.1f}%" if total_runs > 0 else "N/A")
-
-    # Database size
-    db_size = run_query("SELECT pg_size_pretty(pg_database_size('etl_target')) as size")
-    if not db_size.empty:
-        col4.metric("DB Size", db_size.iloc[0]["size"])
+    total = len(runs_df)
+    success = len(runs_df[runs_df["state"] == "success"])
+    col1.metric("Total DAG Runs", total)
+    col2.metric("Successful", success)
+    col3.metric("Success Rate", f"{success/total*100:.1f}%")
+    col4.metric("Active DAGs", 4)
 
     st.divider()
 
-    # Recent quality checks
-    st.subheader("Recent Quality Checks")
-    checks = run_query(
-        """
-        SELECT check_name, table_name, status, message, checked_at
-        FROM monitoring.quality_checks
-        ORDER BY checked_at DESC LIMIT 10
-        """
-    )
-    if not checks.empty:
-        st.dataframe(checks, use_container_width=True)
-    else:
-        st.info("No quality checks recorded yet.")
+    # DAG summary
+    st.subheader("DAGs")
+    for dag_id, schedule in schedules.items():
+        dag_runs = runs_df[runs_df["dag_id"] == dag_id]
+        last = dag_runs.iloc[0]["start_time"].strftime("%Y-%m-%d %H:%M UTC")
+        success_pct = len(dag_runs[dag_runs["state"] == "success"]) / len(dag_runs) * 100
+        avg_dur = dag_runs["duration_seconds"].mean()
+        icon = "✅" if success_pct > 90 else "⚠️"
+        st.markdown(
+            f"{icon} **{dag_id}** — {schedule} | "
+            f"Last: {last} | Avg: {avg_dur:.1f}s | Success: {success_pct:.0f}%"
+        )
 
-# --- DAG Runs Page ---
+    st.divider()
+    st.subheader("Recent Quality Checks")
+    st.dataframe(checks_df.head(10), use_container_width=True, hide_index=True)
+
+# ── DAG Runs ──
 elif page == "DAG Runs":
     st.header("DAG Run History")
 
-    runs = run_query(
-        """
-        SELECT dag_id, state, start_time, end_time, duration_seconds
-        FROM monitoring.pipeline_runs
-        ORDER BY start_time DESC
-        LIMIT 100
-        """
+    selected_dag = st.selectbox("Filter by DAG", ["All"] + list(schedules.keys()))
+    filtered = runs_df if selected_dag == "All" else runs_df[runs_df["dag_id"] == selected_dag]
+
+    st.dataframe(
+        filtered[["dag_id", "state", "start_time", "duration_seconds"]].head(100),
+        use_container_width=True,
+        hide_index=True,
     )
 
-    if not runs.empty:
-        # DAG filter
-        dag_ids = runs["dag_id"].unique().tolist()
-        selected_dag = st.selectbox("Filter by DAG", ["All"] + dag_ids)
+    st.subheader("Run Durations (Last 30)")
+    chart_data = filtered.head(30).copy()
+    chart_data["label"] = chart_data["start_time"].dt.strftime("%m/%d %H:%M")
+    st.bar_chart(chart_data.set_index("label")["duration_seconds"])
 
-        if selected_dag != "All":
-            runs = runs[runs["dag_id"] == selected_dag]
+    st.subheader("Runs by State")
+    state_counts = filtered["state"].value_counts()
+    st.bar_chart(state_counts)
 
-        st.dataframe(runs, use_container_width=True)
-
-        # Duration chart
-        st.subheader("Run Durations")
-        runs_chart = runs[runs["duration_seconds"].notna()].copy()
-        if not runs_chart.empty:
-            runs_chart["start_time"] = pd.to_datetime(runs_chart["start_time"])
-            st.line_chart(runs_chart.set_index("start_time")["duration_seconds"])
-    else:
-        st.info("No DAG runs recorded yet. Run some DAGs first!")
-
-# --- Tables Page ---
+# ── Tables ──
 elif page == "Tables":
     st.header("Table Statistics")
 
     col1, col2 = st.columns(2)
-
     with col1:
         st.subheader("Row Counts")
-        rows = run_query(
-            """
-            SELECT schema_name, table_name, row_count, recorded_at
-            FROM monitoring.table_stats
-            WHERE recorded_at > NOW() - INTERVAL '24 hours'
-            ORDER BY row_count DESC
-            """
+        st.dataframe(
+            table_df[["full_name", "row_count"]].sort_values("row_count", ascending=False),
+            use_container_width=True,
+            hide_index=True,
         )
-        if not rows.empty:
-            st.dataframe(rows, use_container_width=True)
-        else:
-            st.info("No table stats recorded yet.")
-
     with col2:
-        st.subheader("Table Sizes")
-        sizes = run_query(
-            """
-            SELECT schemaname || '.' || tablename as table_name,
-                   pg_size_pretty(pg_total_relation_size(schemaname || '.' || tablename)) as size
-            FROM pg_tables
-            WHERE schemaname IN ('staging', 'production', 'monitoring')
-            ORDER BY pg_total_relation_size(schemaname || '.' || tablename) DESC
-            """
+        st.subheader("Table Sizes (MB)")
+        st.dataframe(
+            table_df[["full_name", "size_mb"]].sort_values("size_mb", ascending=False),
+            use_container_width=True,
+            hide_index=True,
         )
-        if not sizes.empty:
-            st.dataframe(sizes, use_container_width=True)
 
-# --- Data Quality Page ---
+    st.subheader("Rows by Schema")
+    schema_totals = table_df.groupby("schema")["row_count"].sum()
+    st.bar_chart(schema_totals)
+
+# ── Data Quality ──
 elif page == "Data Quality":
     st.header("Data Quality Checks")
 
-    checks = run_query(
-        """
-        SELECT check_name, table_name, status, message, checked_at
-        FROM monitoring.quality_checks
-        ORDER BY checked_at DESC
-        LIMIT 50
-        """
+    statuses = checks_df["status"].unique()
+    selected = st.multiselect("Filter by Status", list(statuses), default=list(statuses))
+    filtered = checks_df[checks_df["status"].isin(selected)]
+
+    def color_status(val):
+        return f"color: {'green' if val == 'PASS' else 'orange' if val == 'WARN' else 'red'}"
+
+    st.dataframe(
+        filtered.style.applymap(color_status, subset=["status"]),
+        use_container_width=True,
+        hide_index=True,
     )
 
-    if not checks.empty:
-        # Status filter
-        statuses = checks["status"].unique().tolist()
-        selected_status = st.multiselect("Filter by Status", statuses, default=statuses)
-        filtered = checks[checks["status"].isin(selected_status)]
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Checks", len(checks_df))
+    c2.metric("Passed", len(checks_df[checks_df["status"] == "PASS"]))
+    c3.metric("Warnings", len(checks_df[checks_df["status"] == "WARN"]))
 
-        # Color code
-        def color_status(val):
-            color = "green" if val == "PASS" else ("orange" if val == "WARN" else "red")
-            return f"color: {color}"
-
-        st.dataframe(filtered.style.applymap(color_status, subset=["status"]), use_container_width=True)
-
-        # Summary
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Checks", len(checks))
-        col2.metric("Passed", len(checks[checks["status"] == "PASS"]))
-        col3.metric("Warnings", len(checks[checks["status"] == "WARN"]))
-    else:
-        st.info("No quality checks recorded yet.")
-
-# --- Exchange Rates Page ---
+# ── Exchange Rates ──
 elif page == "Exchange Rates":
     st.header("Latest Exchange Rates")
 
-    rates = run_query(
-        """
-        SELECT base_currency, target_currency, rate, effective_date
-        FROM production.exchange_rates
-        WHERE effective_date = (SELECT MAX(effective_date) FROM production.exchange_rates)
-        ORDER BY base_currency, target_currency
-        """
-    )
+    base = st.selectbox("Base Currency", rates_df["base_currency"].unique())
+    filtered = rates_df[rates_df["base_currency"] == base]
 
-    if not rates.empty:
-        col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.dataframe(filtered, use_container_width=True, hide_index=True)
+    with col2:
+        st.bar_chart(filtered.set_index("target_currency")["rate"])
 
-        with col1:
-            st.dataframe(rates, use_container_width=True)
-
-        with col2:
-            st.subheader("Rate Distribution")
-            base = st.selectbox("Base Currency", rates["base_currency"].unique())
-            filtered = rates[rates["base_currency"] == base]
-            st.bar_chart(filtered.set_index("target_currency")["rate"])
-
-        # Historical rates
-        st.subheader("Rate History (Last 30 Days)")
-        history = run_query(
-            """
-            SELECT base_currency, target_currency, rate, effective_date
-            FROM production.exchange_rates
-            WHERE effective_date > NOW() - INTERVAL '30 days'
-            ORDER BY effective_date
-            """
-        )
-        if not history.empty:
-            pair = st.selectbox(
-                "Currency Pair",
-                [f"{r['base_currency']}/{r['target_currency']}" for _, r in rates.iterrows()],
-            )
-            base_curr, target_curr = pair.split("/")
-            pair_data = history[
-                (history["base_currency"] == base_curr) &
-                (history["target_currency"] == target_curr)
-            ]
-            if not pair_data.empty:
-                st.line_chart(pair_data.set_index("effective_date")["rate"])
-    else:
-        st.info("No exchange rate data in production yet.")
+# ── Footer ──
+st.divider()
+st.caption(
+    "Built by Ossama Taha | "
+    "[GitHub](https://github.com/OssamaTaha) | "
+    "Tech: Apache Airflow 2.9, PostgreSQL 15, Docker, Python, Streamlit"
+)
