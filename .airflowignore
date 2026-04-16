@@ -1,0 +1,12 @@
+__pycache__
+.git
+.github
+.venv
+*.pyc
+docs/
+tests/
+scripts/
+dashboard/
+README.md
+LICENSE
+.env

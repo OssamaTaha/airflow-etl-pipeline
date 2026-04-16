@@ -1,0 +1,22 @@
+# Airflow Connections Configuration
+# These are set up automatically in docker-compose.yaml
+
+connections:
+  - conn_id: postgres_target
+    conn_type: postgres
+    host: postgres
+    port: 5432
+    login: target_user
+    password: target_pass
+    schema: etl_target
+    description: "Target data warehouse"
+
+  - conn_id: exchange_rate_api
+    conn_type: http
+    host: https://open.er-api.com
+    description: "Exchange Rate API (free, no auth)"
+
+  - conn_id: worldbank_api
+    conn_type: http
+    host: https://api.worldbank.org
+    description: "World Bank Indicators API (free, no auth)"

@@ -1,0 +1,9 @@
+apache-airflow[celery,postgres,redis,http]==2.9.3
+psycopg2-binary==2.9.9
+pandas==2.2.2
+requests==2.32.3
+streamlit==1.36.0
+great-expectations==0.18.21
+pytest==8.2.2
+pytest-asyncio==0.23.7
+sqlalchemy==2.0.31
