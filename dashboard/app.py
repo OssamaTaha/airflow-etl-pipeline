@@ -200,7 +200,7 @@ elif page == "Data Quality":
         return f"color: {'green' if val == 'PASS' else 'orange' if val == 'WARN' else 'red'}"
 
     st.dataframe(
-        filtered.style.applymap(color_status, subset=["status"]),
+        filtered.style.map(color_status, subset=["status"]),
         use_container_width=True,
         hide_index=True,
     )
